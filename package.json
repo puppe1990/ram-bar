@@ -15,6 +15,8 @@
     "test": "node --test test/*.test.mjs && cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --quiet",
     "dev": "tauri dev",
     "tauri": "tauri",
+    "bundle": "tauri build --bundles app",
+    "install:app": "npm run bundle && node scripts/install-app.mjs",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

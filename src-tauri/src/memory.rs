@@ -1,14 +1,22 @@
 use serde::Serialize;
-use sysinfo::{MemoryRefreshKind, RefreshKind, System};
+use sysinfo::{
+    MemoryRefreshKind, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System, UpdateKind,
+};
 
+use crate::app_spend::{app_label, rank_app_spenders, AppSpend};
+
+/// SI gigabyte (10^9). Matches Activity Monitor, not binary GiB.
 const SI_GB: f64 = 1_000_000_000.0;
+const SI_MB: f64 = 1_000_000.0;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemorySnapshot {
     pub total_bytes: u64,
     pub used_bytes: u64,
+    /// sysinfo available; may be 0 on Apple. Menu Livre uses total−used.
     pub available_bytes: u64,
+    pub apps: Vec<AppSpend>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -21,11 +29,34 @@ pub struct MenuCopy {
     pub quit: String,
 }
 
+/// Format bytes as Brazilian SI GB (one decimal, comma).
+/// Mirrored in `web/js/format.mjs` — keep goldens in both suites.
+///
+/// ```
+/// assert_eq!(ram_bar::memory::format_gb(12_400_000_000), "12,4 GB");
+/// ```
 pub fn format_gb(bytes: u64) -> String {
     format!("{:.1} GB", bytes as f64 / SI_GB).replace('.', ",")
 }
 
+/// Per-app RAM for the details list. GB from 1e9 up; MB below.
+///
+/// ```
+/// assert_eq!(ram_bar::memory::format_spend(320_000_000), "320 MB");
+/// ```
+pub fn format_spend(bytes: u64) -> String {
+    if bytes as f64 >= SI_GB {
+        return format_gb(bytes);
+    }
+    let mb = bytes as f64 / SI_MB;
+    if mb >= 10.0 {
+        return format!("{} MB", mb.round() as u64);
+    }
+    format!("{:.1} MB", mb).replace('.', ",")
+}
+
 impl MemorySnapshot {
+    /// Used/total as a clamped integer percent (`8 GB of 16 GB → 50`).
     pub fn usage_percent(&self) -> u8 {
         if self.total_bytes == 0 {
             return 0;
@@ -34,10 +65,13 @@ impl MemorySnapshot {
         pct.clamp(0.0, 100.0) as u8
     }
 
+    /// Menu-bar title: used GB, two spaces, integer percent (`"8,0 GB  50%"`).
     pub fn tray_title(&self) -> String {
         format!("{}  {}%", format_gb(self.used_bytes), self.usage_percent())
     }
 
+    /// Portuguese tray copy. Livre is total−used: sysinfo `available_memory`
+    /// can be 0 on Apple when compressor pages exceed free+inactive+purgeable.
     pub fn menu_copy(&self) -> MenuCopy {
         let free_bytes = self.total_bytes.saturating_sub(self.used_bytes);
         MenuCopy {
@@ -51,16 +85,34 @@ impl MemorySnapshot {
     }
 }
 
+fn process_refresh() -> ProcessRefreshKind {
+    ProcessRefreshKind::nothing()
+        .with_memory()
+        .with_exe(UpdateKind::OnlyIfNotSet)
+}
+
+/// Wraps sysinfo. Apple used = active+wired+compressor+speculative.
 pub fn read_snapshot() -> MemorySnapshot {
     let mut sys = System::new_with_specifics(
-        RefreshKind::nothing().with_memory(MemoryRefreshKind::everything()),
+        RefreshKind::nothing()
+            .with_memory(MemoryRefreshKind::everything())
+            .with_processes(process_refresh()),
     );
     sys.refresh_memory();
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, process_refresh());
     MemorySnapshot {
         total_bytes: sys.total_memory(),
         used_bytes: sys.used_memory(),
         available_bytes: sys.available_memory(),
+        apps: app_spenders_from(&sys),
     }
+}
+
+fn app_spenders_from(sys: &System) -> Vec<AppSpend> {
+    rank_app_spenders(sys.processes().values().map(|proc| {
+        let name = proc.name().to_string_lossy().into_owned();
+        (app_label(proc.exe(), &name), proc.memory())
+    }))
 }
 
 #[cfg(test)]
@@ -75,6 +127,7 @@ mod tests {
             total_bytes: total,
             used_bytes: used,
             available_bytes: total.saturating_sub(used),
+            apps: Vec::new(),
         }
     }
 
@@ -110,6 +163,7 @@ mod tests {
             total_bytes: total,
             used_bytes: total / 2,
             available_bytes: total / 2,
+            apps: Vec::new(),
         };
         assert_eq!(snap.usage_percent(), 50);
     }
@@ -121,6 +175,7 @@ mod tests {
             total_bytes: 0,
             used_bytes: used,
             available_bytes: 0,
+            apps: Vec::new(),
         };
         assert_eq!(snap.usage_percent(), 0);
     }
@@ -133,6 +188,7 @@ mod tests {
             total_bytes: total,
             used_bytes: total + extra,
             available_bytes: 0,
+            apps: Vec::new(),
         };
         assert_eq!(snap.usage_percent(), 100);
     }
@@ -152,6 +208,7 @@ mod tests {
             total_bytes: 16_000_000_000,
             used_bytes: 8_000_000_000,
             available_bytes: 8_000_000_000,
+            apps: Vec::new(),
         };
         assert_eq!(snap.tray_title(), "8,0 GB  50%");
     }
@@ -180,8 +237,24 @@ mod tests {
             total_bytes: 8_600_000_000,
             used_bytes: 7_200_000_000,
             available_bytes: 0,
+            apps: Vec::new(),
         };
         assert_eq!(snap.menu_copy().free, "Livre 1,4 GB");
+    }
+
+    #[test]
+    fn format_spend_uses_gb_from_one_billion() {
+        assert_eq!(format_spend(2_400_000_000), "2,4 GB");
+    }
+
+    #[test]
+    fn format_spend_uses_integer_mb_between_10mb_and_1gb() {
+        assert_eq!(format_spend(320_000_000), "320 MB");
+    }
+
+    #[test]
+    fn format_spend_uses_comma_mb_below_10mb() {
+        assert_eq!(format_spend(5_400_000), "5,4 MB");
     }
 
     #[test]
@@ -198,5 +271,22 @@ mod tests {
             snap.used_bytes,
             snap.total_bytes
         );
+    }
+
+    #[test]
+    fn live_snapshot_lists_ranked_apps() {
+        let snap = read_snapshot();
+        assert!(
+            !snap.apps.is_empty(),
+            "expected at least one process with RAM"
+        );
+        for pair in snap.apps.windows(2) {
+            assert!(
+                pair[0].bytes >= pair[1].bytes,
+                "apps must be sorted biggest first, got {} then {}",
+                pair[0].bytes,
+                pair[1].bytes
+            );
+        }
     }
 }
