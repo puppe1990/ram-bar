@@ -8,14 +8,100 @@
   </head>
   <body>
     <main>
-      <p class="brand">RAM Bar</p>
-      <p id="tray" class="tray">—</p>
-      <ul>
-        <li id="used">Usado</li>
-        <li id="free">Livre</li>
-        <li id="total">Total</li>
-      </ul>
-      <p id="usage" class="usage">—</p>
+      <nav class="tabs" aria-label="RAM Bar">
+        <button type="button" class="tab is-on" data-tab="ram" tabindex="-1">
+          <svg class="tab-icon" viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.2" />
+            <rect x="9" y="1.5" width="5.5" height="5.5" rx="1.2" />
+            <rect x="1.5" y="9" width="5.5" height="5.5" rx="1.2" />
+            <rect x="9" y="9" width="5.5" height="5.5" rx="1.2" />
+          </svg>
+          RAM
+        </button>
+        <button type="button" class="tab" data-tab="disk" tabindex="-1">
+          <svg class="tab-icon" viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="1.5" y="3.5" width="13" height="9" rx="1.8" />
+            <rect x="3.2" y="6.2" width="4" height="1.5" rx="0.5" class="tab-icon-cut" />
+          </svg>
+          Disco
+        </button>
+      </nav>
+
+      <div class="panes">
+        <section id="pane-ram" class="pane is-on">
+          <article class="card">
+            <header class="card-head">
+              <p class="card-title">Memória</p>
+              <p id="plan" class="card-plan">—</p>
+            </header>
+            <p class="card-meta">usado agora neste Mac</p>
+            <div class="pct-row">
+              <p id="usage" class="pct">—</p>
+            </div>
+            <div id="meter" class="meter" style="--used: 0%">
+              <span class="meter-spectrum"></span>
+              <span class="meter-mask"></span>
+            </div>
+            <dl class="stats">
+              <div>
+                <dt>Usado</dt>
+                <dd id="used">—</dd>
+              </div>
+              <div>
+                <dt>Livre</dt>
+                <dd id="free">—</dd>
+              </div>
+              <div>
+                <dt>Total</dt>
+                <dd id="total">—</dd>
+              </div>
+            </dl>
+          </article>
+
+          <section class="card spenders">
+            <p class="section-label">Gastões</p>
+            <ol id="apps" class="apps"></ol>
+          </section>
+        </section>
+
+        <section id="pane-disk" class="pane">
+          <article class="card">
+            <header class="card-head">
+              <p id="disk-title" class="card-title">Disco</p>
+              <p id="disk-plan" class="card-plan">—</p>
+            </header>
+            <p class="card-meta">espaço neste volume</p>
+            <div class="pct-row">
+              <p id="disk-usage" class="pct">—</p>
+            </div>
+            <div id="disk-meter" class="meter" style="--used: 0%">
+              <span class="meter-spectrum"></span>
+              <span class="meter-mask"></span>
+            </div>
+            <dl class="stats">
+              <div>
+                <dt>Usado</dt>
+                <dd id="disk-used">—</dd>
+              </div>
+              <div>
+                <dt>Livre</dt>
+                <dd id="disk-free">—</dd>
+              </div>
+              <div>
+                <dt>Total</dt>
+                <dd id="disk-total">—</dd>
+              </div>
+            </dl>
+          </article>
+
+          <section class="card spenders">
+            <p class="section-label">Volumes</p>
+            <ol id="volumes" class="apps"></ol>
+          </section>
+        </section>
+      </div>
+
+      <button id="quit" type="button" class="quit" tabindex="-1">Sair</button>
     </main>
     <script type="module" src="js/panel.js"></script>
   </body>
