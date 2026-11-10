@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "RAM Bar panel",
+  "windows": ["panel"],
+  "permissions": ["core:default", "core:event:default"]
+}
